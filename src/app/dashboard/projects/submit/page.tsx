@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 
 interface Track {
@@ -32,15 +32,20 @@ interface Project {
 interface Team {
   id: string;
   name: string;
+  hackathonId: string;
   hackathon: Hackathon;
   projects: Project[];
 }
 
-export default function ProjectSubmitPage() {
+function ProjectSubmitContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryTeamId = searchParams.get('teamId');
+  const queryHackathonId = searchParams.get('hackathonId');
 
   const [loading, setLoading] = useState(true);
-  const [team, setTeam] = useState<Team | null>(null);
+  const [allTeams, setAllTeams] = useState<Team[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
 
   // Form states
   const [name, setName] = useState('');
@@ -59,6 +64,7 @@ export default function ProjectSubmitPage() {
   const [deadlinePassed, setDeadlinePassed] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState('');
 
+  // Load user teams
   useEffect(() => {
     async function loadData() {
       try {
@@ -67,28 +73,23 @@ export default function ProjectSubmitPage() {
         const data = await res.json();
 
         if (data.success && data.teams && data.teams.length > 0) {
-          const userTeam = data.teams[0];
-          setTeam(userTeam);
+          const teamsList: Team[] = data.teams;
+          setAllTeams(teamsList);
 
-          // Check deadline
-          const now = new Date();
-          const end = new Date(userTeam.hackathon.endDate);
-          if (now > end) {
-            setDeadlinePassed(true);
+          // Determine initial team selection
+          let target = teamsList[0];
+          if (queryTeamId) {
+            const found = teamsList.find((t) => t.id === queryTeamId);
+            if (found) target = found;
+          } else if (queryHackathonId) {
+            const found = teamsList.find(
+              (t) => t.hackathonId === queryHackathonId || t.hackathon?.id === queryHackathonId
+            );
+            if (found) target = found;
           }
 
-          // Preload existing project draft if present
-          if (userTeam.projects && userTeam.projects.length > 0) {
-            const p = userTeam.projects[0];
-            setName(p.name || '');
-            setDescription(p.description || '');
-            setRepoUrl(p.repoUrl || '');
-            setDemoUrl(p.demoUrl || '');
-            setTrackId(p.trackId || '');
-            setCurrentStatus(p.status || 'DRAFT');
-          } else if (userTeam.hackathon.tracks && userTeam.hackathon.tracks.length > 0) {
-            setTrackId(userTeam.hackathon.tracks[0].id);
-          }
+          setSelectedTeamId(target.id);
+          applyTeamData(target);
         }
       } catch (err) {
         console.error(err);
@@ -98,14 +99,51 @@ export default function ProjectSubmitPage() {
     }
 
     loadData();
-  }, []);
+  }, [queryTeamId, queryHackathonId]);
+
+  const applyTeamData = (userTeam: Team) => {
+    // Check deadline
+    const now = new Date();
+    const end = new Date(userTeam.hackathon.endDate);
+    setDeadlinePassed(now > end);
+
+    // Preload existing project draft if present
+    if (userTeam.projects && userTeam.projects.length > 0) {
+      const p = userTeam.projects[0];
+      setName(p.name || '');
+      setDescription(p.description || '');
+      setRepoUrl(p.repoUrl || '');
+      setDemoUrl(p.demoUrl || '');
+      setTrackId(p.trackId || (userTeam.hackathon.tracks?.[0]?.id || ''));
+      setCurrentStatus(p.status || 'DRAFT');
+    } else {
+      setName('');
+      setDescription('');
+      setRepoUrl('');
+      setDemoUrl('');
+      setTrackId(userTeam.hackathon.tracks?.[0]?.id || '');
+      setCurrentStatus('DRAFT');
+    }
+  };
+
+  const handleTeamChange = (newTeamId: string) => {
+    setSelectedTeamId(newTeamId);
+    setError('');
+    setSuccess('');
+    const found = allTeams.find((t) => t.id === newTeamId);
+    if (found) {
+      applyTeamData(found);
+    }
+  };
+
+  const currentTeam = allTeams.find((t) => t.id === selectedTeamId);
 
   // Update countdown clock
   useEffect(() => {
-    if (!team) return;
+    if (!currentTeam) return;
     const interval = setInterval(() => {
       const now = new Date().getTime();
-      const end = new Date(team.hackathon.endDate).getTime();
+      const end = new Date(currentTeam.hackathon.endDate).getTime();
       const distance = end - now;
 
       if (distance < 0) {
@@ -122,24 +160,34 @@ export default function ProjectSubmitPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [team]);
+  }, [currentTeam]);
 
   const handleSave = async (targetStatus: 'DRAFT' | 'SUBMITTED') => {
-    if (!team) return;
+    if (!currentTeam) return;
     setError('');
     setSuccess('');
     setSaving(true);
+
+    let cleanRepo = repoUrl.trim();
+    if (cleanRepo && !/^https?:\/\//i.test(cleanRepo)) {
+      cleanRepo = `https://${cleanRepo}`;
+    }
+
+    let cleanDemo = demoUrl.trim();
+    if (cleanDemo && !/^https?:\/\//i.test(cleanDemo)) {
+      cleanDemo = `https://${cleanDemo}`;
+    }
 
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          teamId: team.id,
+          teamId: currentTeam.id,
           name,
           description,
-          repoUrl,
-          demoUrl,
+          repoUrl: cleanRepo,
+          demoUrl: cleanDemo || undefined,
           trackId,
           status: targetStatus
         })
@@ -177,13 +225,13 @@ export default function ProjectSubmitPage() {
     );
   }
 
-  if (!team) {
+  if (!currentTeam) {
     return (
       <div className="container" style={{ paddingTop: '5rem', maxWidth: '600px' }}>
         <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center' }}>
-          <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem' }}>No Active Team Found</h2>
+          <h2 style={{ fontSize: '1.75rem', marginBottom: '1rem' }}>No Registered Squad Found</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-            To submit a project, you must first create or join a team for the hackathon event.
+            To submit a project, you must first create or join a team for a hackathon event.
           </p>
           <Link href="/dashboard/teams" className="btn btn-primary">
             Go to Team Operations
@@ -196,10 +244,36 @@ export default function ProjectSubmitPage() {
   return (
     <div className="container" style={{ paddingTop: '3rem', paddingBottom: '5rem', maxWidth: '900px' }}>
       <div style={{ marginBottom: '2rem' }}>
-        <Link href="/dashboard/projects" className="btn btn-secondary" style={{ fontSize: '0.875rem' }}>
-          ← Back to Projects
+        <Link href={`/dashboard/teams?hackathonId=${currentTeam.hackathonId || currentTeam.hackathon.id}`} className="btn btn-secondary" style={{ fontSize: '0.875rem' }}>
+          ← Back to Squad Workspace
         </Link>
       </div>
+
+      {/* Team / Hackathon Switcher if user has multiple teams */}
+      {allTeams.length > 1 && (
+        <div className="glass-panel" style={{ padding: '1.25rem 1.75rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>
+              Select Submission Scope
+            </span>
+            <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>
+              Submitting for Hackathon Squad:
+            </div>
+          </div>
+          <select
+            className="input-field"
+            style={{ maxWidth: '350px' }}
+            value={selectedTeamId}
+            onChange={(e) => handleTeamChange(e.target.value)}
+          >
+            {allTeams.map((t) => (
+              <option key={t.id} value={t.id} style={{ background: '#121218' }}>
+                {t.hackathon.name} — Team {t.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Deadline telemetry header */}
       <motion.div
@@ -219,9 +293,9 @@ export default function ProjectSubmitPage() {
       >
         <div>
           <span style={{ fontSize: '0.75rem', color: 'var(--accent-tertiary)', fontWeight: 700, textTransform: 'uppercase' }}>
-            {team.hackathon.name} • TEAM: {team.name}
+            {currentTeam.hackathon.name} • SQUAD: {currentTeam.name}
           </span>
-          <h3 style={{ fontSize: '1.25rem', marginTop: '0.25rem' }}>Submission Pipeline</h3>
+          <h3 style={{ fontSize: '1.25rem', marginTop: '0.25rem' }}>Project Submission Pipeline</h3>
         </div>
 
         <div style={{ textAlign: 'right' }}>
@@ -283,7 +357,7 @@ export default function ProjectSubmitPage() {
             border: '1px solid rgba(239, 68, 68, 0.3)'
           }}
         >
-          ⚠️ Hard deadline has expired. This project is permanently locked against further edits.
+          ⚠️ Hard deadline has expired for this event. Submissions are permanently locked against edits.
         </div>
       )}
 
@@ -335,7 +409,7 @@ export default function ProjectSubmitPage() {
               value={trackId}
               onChange={(e) => setTrackId(e.target.value)}
             >
-              {team.hackathon.tracks.map((t) => (
+              {currentTeam.hackathon.tracks?.map((t) => (
                 <option key={t.id} value={t.id} style={{ background: '#121218' }}>
                   {t.name} — {t.description}
                 </option>
@@ -349,9 +423,9 @@ export default function ProjectSubmitPage() {
                 Git Repository URL *
               </label>
               <input
-                type="url"
+                type="text"
                 disabled={deadlinePassed}
-                placeholder="https://github.com/org/repo"
+                placeholder="https://github.com/org/repo or github.com/..."
                 className="input-field"
                 value={repoUrl}
                 onChange={(e) => setRepoUrl(e.target.value)}
@@ -363,9 +437,9 @@ export default function ProjectSubmitPage() {
                 Live Demo / Video URL (Optional)
               </label>
               <input
-                type="url"
+                type="text"
                 disabled={deadlinePassed}
-                placeholder="https://demo.example.com or YouTube link"
+                placeholder="https://demo.example.com, youtube.com/..., or loom.com/..."
                 className="input-field"
                 value={demoUrl}
                 onChange={(e) => setDemoUrl(e.target.value)}
@@ -466,5 +540,17 @@ export default function ProjectSubmitPage() {
         </div>
       </motion.div>
     </div>
+  );
+}
+
+export default function ProjectSubmitPage() {
+  return (
+    <Suspense fallback={
+      <div className="container" style={{ paddingTop: '5rem', textAlign: 'center' }}>
+        <p style={{ color: 'var(--text-secondary)' }}>Loading project submission pipeline...</p>
+      </div>
+    }>
+      <ProjectSubmitContent />
+    </Suspense>
   );
 }

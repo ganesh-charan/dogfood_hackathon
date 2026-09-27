@@ -111,18 +111,25 @@ export default function ProjectsListPage() {
             >
               <div>
                 <div className="flex justify-between items-center" style={{ marginBottom: '1rem' }}>
-                  <span
-                    style={{
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '9999px',
-                      background: proj.status === 'SUBMITTED' ? 'rgba(20, 184, 166, 0.2)' : 'rgba(234, 179, 8, 0.2)',
-                      color: proj.status === 'SUBMITTED' ? 'var(--accent-tertiary)' : '#eab308'
-                    }}
-                  >
-                    {proj.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '9999px',
+                        background: proj.status === 'SUBMITTED' ? 'rgba(20, 184, 166, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                        color: proj.status === 'SUBMITTED' ? 'var(--accent-tertiary)' : '#eab308'
+                      }}
+                    >
+                      {proj.status}
+                    </span>
+                    {proj.team.hackathon && (
+                      <span style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', fontWeight: 600 }}>
+                        {proj.team.hackathon.name}
+                      </span>
+                    )}
+                  </div>
 
                   {proj.track && (
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
@@ -155,7 +162,7 @@ export default function ProjectsListPage() {
                   )}
                 </div>
 
-                <Link href="/dashboard/projects/submit" className="btn btn-secondary" style={{ width: '100%', fontSize: '0.875rem' }}>
+                <Link href={`/dashboard/projects/submit?teamId=${proj.team.id}`} className="btn btn-secondary" style={{ width: '100%', fontSize: '0.875rem' }}>
                   Edit Submission
                 </Link>
               </div>

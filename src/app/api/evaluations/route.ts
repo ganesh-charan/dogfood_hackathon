@@ -9,14 +9,82 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Ensure every hackathon has at least one valid rubric
+    const allHackathons = await db.hackathon.findMany();
+    for (const h of allHackathons) {
+      const existingRubric = await db.rubric.findFirst({ where: { hackathonId: h.id } });
+      if (!existingRubric) {
+        await db.rubric.create({
+          data: {
+            name: `${h.name} Standard Rubric`,
+            hackathonId: h.id,
+            criteria: {
+              create: [
+                { name: 'Functionality & Execution', weight: 0.40, maxScore: 5 },
+                { name: 'Code Quality & Architecture', weight: 0.30, maxScore: 5 },
+                { name: 'Innovation & UX', weight: 0.30, maxScore: 5 }
+              ]
+            }
+          }
+        });
+      }
+    }
+
     if (user.role === 'JUDGE') {
+      // Find all submitted projects across all hackathons
+      const submittedProjects = await db.project.findMany({
+        where: { status: 'SUBMITTED' },
+        include: {
+          team: {
+            include: {
+              members: { select: { userId: true, user: { select: { email: true } } } }
+            }
+          }
+        }
+      });
+
+      // Ensure an evaluation record exists for this judge for all eligible submitted projects (no COI)
+      for (const proj of submittedProjects) {
+        const isMember = proj.team.members.some(
+          (m) => m.userId === user.id || m.user.email.toLowerCase() === user.email.toLowerCase()
+        );
+        if (isMember) continue; // Conflict of interest: judge cannot evaluate own team
+
+        const existing = await db.evaluation.findUnique({
+          where: {
+            judgeId_projectId: {
+              judgeId: user.id,
+              projectId: proj.id
+            }
+          }
+        });
+
+        if (!existing) {
+          await db.evaluation.create({
+            data: {
+              judgeId: user.id,
+              projectId: proj.id,
+              totalScore: 0,
+              completed: false
+            }
+          });
+        }
+      }
+
       const evaluations = await db.evaluation.findMany({
         where: { judgeId: user.id },
         include: {
           project: {
             include: {
               track: true,
-              team: { select: { id: true, name: true } }
+              team: {
+                select: {
+                  id: true,
+                  name: true,
+                  hackathonId: true,
+                  hackathon: { select: { id: true, name: true } }
+                }
+              }
             }
           },
           scores: {
@@ -26,9 +94,9 @@ export async function GET() {
         orderBy: { completed: 'asc' }
       });
 
-      // Also get rubric criteria for the hackathon
+      // Fetch rubrics with their criteria and associated hackathon
       const rubrics = await db.rubric.findMany({
-        include: { criteria: true }
+        include: { criteria: true, hackathon: true }
       });
 
       return NextResponse.json({
@@ -45,7 +113,14 @@ export async function GET() {
           project: {
             include: {
               track: true,
-              team: { select: { id: true, name: true } }
+              team: {
+                select: {
+                  id: true,
+                  name: true,
+                  hackathonId: true,
+                  hackathon: { select: { id: true, name: true } }
+                }
+              }
             }
           },
           scores: {
@@ -55,7 +130,11 @@ export async function GET() {
         orderBy: { completed: 'asc' }
       });
 
-      return NextResponse.json({ success: true, evaluations });
+      const rubrics = await db.rubric.findMany({
+        include: { criteria: true, hackathon: true }
+      });
+
+      return NextResponse.json({ success: true, evaluations, rubrics });
     }
 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -97,6 +176,28 @@ export async function POST(req: Request) {
           }
         }
       });
+
+      if (!evaluation) {
+        // Check project exists and judge is not a team member
+        const proj = await db.project.findUnique({
+          where: { id: projectId },
+          include: { team: { include: { members: true } } }
+        });
+        if (!proj) {
+          return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+        }
+        if (proj.team.members.some((m) => m.userId === targetJudgeId)) {
+          return NextResponse.json({ error: 'Conflict of interest: Judge cannot evaluate their own team project' }, { status: 403 });
+        }
+        evaluation = await db.evaluation.create({
+          data: {
+            judgeId: targetJudgeId,
+            projectId,
+            totalScore: 0,
+            completed: false
+          }
+        });
+      }
     }
 
     if (!evaluation) {

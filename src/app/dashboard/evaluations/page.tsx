@@ -18,7 +18,11 @@ interface Project {
   repoUrl: string | null;
   demoUrl: string | null;
   track?: { name: string };
-  team: { name: string };
+  team: {
+    name: string;
+    hackathonId?: string;
+    hackathon?: { id: string; name: string };
+  };
 }
 
 interface EvaluationScore {
@@ -42,6 +46,7 @@ interface Evaluation {
 interface Rubric {
   id: string;
   name: string;
+  hackathonId?: string;
   criteria: Criteria[];
 }
 
@@ -50,6 +55,7 @@ export default function EvaluationsDashboardPage() {
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEval, setSelectedEval] = useState<Evaluation | null>(null);
+  const [selectedHackathonFilter, setSelectedHackathonFilter] = useState<string>('ALL');
 
   // Scoring form state
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -101,11 +107,18 @@ export default function EvaluationsDashboardPage() {
     };
   }, []);
 
+  const getRubricForEval = (ev: Evaluation) => {
+    const hackathonId = ev.project.team.hackathonId || ev.project.team.hackathon?.id;
+    return rubrics.find((r) => r.hackathonId === hackathonId) || rubrics[0] || null;
+  };
+
   const openEvaluationModal = (ev: Evaluation) => {
     setSelectedEval(ev);
     setMessage('');
     setError('');
     setComment(ev.comment || '');
+
+    const targetRubric = getRubricForEval(ev);
 
     // Initialize scores
     const initialScores: Record<string, number> = {};
@@ -113,8 +126,8 @@ export default function EvaluationsDashboardPage() {
       ev.scores.forEach((s) => {
         initialScores[s.criteriaId] = s.score;
       });
-    } else if (rubrics.length > 0 && rubrics[0].criteria) {
-      rubrics[0].criteria.forEach((c) => {
+    } else if (targetRubric && targetRubric.criteria) {
+      targetRubric.criteria.forEach((c) => {
         initialScores[c.id] = 3; // Default middle score
       });
     }
@@ -125,10 +138,12 @@ export default function EvaluationsDashboardPage() {
     setScores((prev) => ({ ...prev, [criteriaId]: value }));
   };
 
-  const calculateLiveTotal = () => {
-    if (!rubrics.length || !rubrics[0].criteria) return 0;
+  const calculateLiveTotal = (ev: Evaluation | null) => {
+    if (!ev) return '0.00';
+    const targetRubric = getRubricForEval(ev);
+    if (!targetRubric || !targetRubric.criteria) return '0.00';
     let sum = 0;
-    rubrics[0].criteria.forEach((c) => {
+    targetRubric.criteria.forEach((c) => {
       const s = scores[c.id] || 0;
       sum += s * c.weight;
     });
@@ -193,8 +208,28 @@ export default function EvaluationsDashboardPage() {
     }
   };
 
-  const completedCount = evaluations.filter((e) => e.completed).length;
-  const progressPercent = evaluations.length > 0 ? Math.round((completedCount / evaluations.length) * 100) : 0;
+  // Extract distinct hackathons from evaluations
+  const distinctHackathons = Array.from(
+    new Map(
+      evaluations
+        .map((e) => {
+          const h = e.project.team.hackathon;
+          return h ? [h.id, h.name] : null;
+        })
+        .filter(Boolean) as [string, string][]
+    )
+  );
+
+  const filteredEvaluations = selectedHackathonFilter === 'ALL'
+    ? evaluations
+    : evaluations.filter(
+        (e) =>
+          e.project.team.hackathon?.id === selectedHackathonFilter ||
+          e.project.team.hackathonId === selectedHackathonFilter
+      );
+
+  const completedCount = filteredEvaluations.filter((e) => e.completed).length;
+  const progressPercent = filteredEvaluations.length > 0 ? Math.round((completedCount / filteredEvaluations.length) * 100) : 0;
 
   return (
     <div className="container" style={{ paddingTop: '3rem', paddingBottom: '6rem' }}>
@@ -232,6 +267,37 @@ export default function EvaluationsDashboardPage() {
         </div>
       </div>
 
+      {/* Filter by Hackathon Tabs */}
+      {distinctHackathons.length > 1 && (
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6rem' }}>
+            Filter Queue by Hackathon
+          </div>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setSelectedHackathonFilter('ALL')}
+              className={selectedHackathonFilter === 'ALL' ? 'btn btn-primary' : 'btn btn-secondary'}
+              style={{ fontSize: '0.85rem', padding: '0.4rem 0.9rem' }}
+            >
+              All Events ({evaluations.length})
+            </button>
+            {distinctHackathons.map(([hid, hname]) => {
+              const count = evaluations.filter(e => e.project.team.hackathon?.id === hid || e.project.team.hackathonId === hid).length;
+              return (
+                <button
+                  key={hid}
+                  onClick={() => setSelectedHackathonFilter(hid)}
+                  className={selectedHackathonFilter === hid ? 'btn btn-primary' : 'btn btn-secondary'}
+                  style={{ fontSize: '0.85rem', padding: '0.4rem 0.9rem' }}
+                >
+                  {hname} ({count})
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {message && (
         <div
           style={{
@@ -268,7 +334,7 @@ export default function EvaluationsDashboardPage() {
         <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem' }}>
           <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Review Progress</span>
           <span style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-            {completedCount} / {evaluations.length} Completed ({progressPercent}%)
+            {completedCount} / {filteredEvaluations.length} Completed ({progressPercent}%)
           </span>
         </div>
         <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', overflow: 'hidden' }}>
@@ -288,16 +354,18 @@ export default function EvaluationsDashboardPage() {
         <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
           Loading evaluation queue...
         </div>
-      ) : evaluations.length === 0 ? (
+      ) : filteredEvaluations.length === 0 ? (
         <div className="glass-panel" style={{ padding: '4rem 2rem', textAlign: 'center', maxWidth: '600px', margin: '0 auto' }}>
           <h3 style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>No Evaluations In Queue</h3>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Your reviewer queue is empty or assignments have not been distributed yet by an organizer.
+            {selectedHackathonFilter !== 'ALL'
+              ? 'No projects in this specific hackathon are assigned to your evaluation queue.'
+              : 'Your reviewer queue is empty or assignments have not been distributed yet by an organizer.'}
           </p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '2rem' }}>
-          {evaluations.map((ev) => (
+          {filteredEvaluations.map((ev) => (
             <motion.div
               key={ev.id}
               initial={{ opacity: 0, y: 10 }}
@@ -311,7 +379,7 @@ export default function EvaluationsDashboardPage() {
               }}
             >
               <div>
-                <div className="flex justify-between items-center" style={{ marginBottom: '1rem' }}>
+                <div className="flex justify-between items-center" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <span
                     style={{
                       fontSize: '0.75rem',
@@ -325,11 +393,27 @@ export default function EvaluationsDashboardPage() {
                     {ev.completed ? 'COMPLETED' : 'PENDING EVALUATION'}
                   </span>
 
-                  {ev.project.track && (
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      {ev.project.track.name}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {ev.project.team.hackathon && (
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'rgba(99, 102, 241, 0.15)',
+                          color: 'var(--accent-primary)',
+                          fontWeight: 600
+                        }}
+                      >
+                        {ev.project.team.hackathon.name}
+                      </span>
+                    )}
+                    {ev.project.track && (
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {ev.project.track.name}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 <h3 style={{ fontSize: '1.4rem', marginBottom: '0.3rem' }}>{ev.project.name}</h3>
@@ -435,36 +519,47 @@ export default function EvaluationsDashboardPage() {
             </div>
 
             <form onSubmit={handleSubmitScore} className="flex flex-col gap-5">
-              {rubrics.length > 0 && rubrics[0].criteria.map((crit) => (
-                <div key={crit.id} className="glass-panel" style={{ padding: '1rem', background: 'rgba(25,25,35,0.4)' }}>
-                  <div className="flex justify-between items-center" style={{ marginBottom: '0.5rem' }}>
-                    <div>
-                      <span style={{ fontWeight: 600 }}>{crit.name}</span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-                        (Weight: {(crit.weight * 100).toFixed(0)}%)
+              {(() => {
+                const targetRubric = getRubricForEval(selectedEval);
+                if (!targetRubric || !targetRubric.criteria || targetRubric.criteria.length === 0) {
+                  return (
+                    <div className="glass-panel" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                      No rubric criteria found for this competition event.
+                    </div>
+                  );
+                }
+
+                return targetRubric.criteria.map((crit) => (
+                  <div key={crit.id} className="glass-panel" style={{ padding: '1rem', background: 'rgba(25,25,35,0.4)' }}>
+                    <div className="flex justify-between items-center" style={{ marginBottom: '0.5rem' }}>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{crit.name}</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
+                          (Weight: {(crit.weight * 100).toFixed(0)}%)
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
+                        {scores[crit.id] || 3} / {crit.maxScore}
                       </span>
                     </div>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                      {scores[crit.id] || 3} / {crit.maxScore}
-                    </span>
-                  </div>
 
-                  <input
-                    type="range"
-                    min={1}
-                    max={crit.maxScore}
-                    step={1}
-                    style={{ width: '100%', accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
-                    value={scores[crit.id] || 3}
-                    onChange={(e) => handleScoreChange(crit.id, Number(e.target.value))}
-                  />
-                </div>
-              ))}
+                    <input
+                      type="range"
+                      min={1}
+                      max={crit.maxScore}
+                      step={1}
+                      style={{ width: '100%', accentColor: 'var(--accent-primary)', cursor: 'pointer' }}
+                      value={scores[crit.id] || 3}
+                      onChange={(e) => handleScoreChange(crit.id, Number(e.target.value))}
+                    />
+                  </div>
+                ));
+              })()}
 
               <div className="flex justify-between items-center" style={{ padding: '1rem', background: 'rgba(99,102,241,0.1)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(99,102,241,0.2)' }}>
                 <span style={{ fontWeight: 600 }}>Total Weighted Raw Score:</span>
                 <span style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  {calculateLiveTotal()} / 5.0
+                  {calculateLiveTotal(selectedEval)} / 5.0
                 </span>
               </div>
 

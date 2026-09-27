@@ -18,6 +18,8 @@ interface VoteTally {
 }
 
 export default function VotingManagementPage() {
+  const [allHackathons, setAllHackathons] = useState<Hackathon[]>([]);
+  const [selectedHackathonId, setSelectedHackathonId] = useState<string>('');
   const [hackathon, setHackathon] = useState<Hackathon | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -26,13 +28,12 @@ export default function VotingManagementPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
-  const loadData = async () => {
+  const loadHackathonData = async (hId: string) => {
     try {
-      setLoading(true);
       const [eventRes, voteRes, projRes] = await Promise.all([
-        fetch('/api/events/voting'),
+        fetch(`/api/events/voting?hackathonId=${hId}`),
         fetch('/api/votes'),
-        fetch('/api/projects')
+        fetch(`/api/projects?hackathonId=${hId}`)
       ]);
 
       const eventData = await eventRes.json();
@@ -57,14 +58,16 @@ export default function VotingManagementPage() {
 
         const list: VoteTally[] = [];
         for (const [projId, count] of Object.entries(counts)) {
-          sum += count;
           const p = projectMap.get(projId);
-          list.push({
-            projectId: projId,
-            projectName: p?.name || projId,
-            teamName: p?.team?.name || 'Unknown',
-            votes: count
-          });
+          if (p) {
+            sum += count;
+            list.push({
+              projectId: projId,
+              projectName: p.name || projId,
+              teamName: p.team?.name || 'Unknown',
+              votes: count
+            });
+          }
         }
         list.sort((a, b) => b.votes - a.votes);
         setTallies(list);
@@ -73,8 +76,6 @@ export default function VotingManagementPage() {
     } catch (err) {
       console.error(err);
       setError('Failed to load community voting telemetry.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -82,56 +83,24 @@ export default function VotingManagementPage() {
     let isMounted = true;
     const init = async () => {
       try {
-        const [eventRes, voteRes, projRes] = await Promise.all([
-          fetch('/api/events/voting'),
-          fetch('/api/votes'),
-          fetch('/api/projects')
-        ]);
+        setLoading(true);
+        const eventsRes = await fetch('/api/events');
+        const eventsData = await eventsRes.json();
 
-        const eventData = await eventRes.json();
-        const voteData = await voteRes.json();
-        const projData = await projRes.json();
-
-        if (isMounted) {
-          if (eventData.success) {
-            setHackathon({
-              id: eventData.hackathonId,
-              name: eventData.name,
-              votingOpen: eventData.votingOpen
-            });
-          }
-
-          if (voteData.success && voteData.voteCounts && projData.success && projData.projects) {
-            const counts: Record<string, number> = voteData.voteCounts;
-            let sum = 0;
-            const projectMap = new Map();
-            projData.projects.forEach((p: { id: string; name: string; team?: { name: string } }) => {
-              projectMap.set(p.id, p);
-            });
-
-            const list: VoteTally[] = [];
-            for (const [projId, count] of Object.entries(counts)) {
-              sum += count;
-              const p = projectMap.get(projId);
-              list.push({
-                projectId: projId,
-                projectName: p?.name || projId,
-                teamName: p?.team?.name || 'Unknown',
-                votes: count
-              });
-            }
-            list.sort((a, b) => b.votes - a.votes);
-            setTallies(list);
-            setTotalVotes(sum);
-          }
-          setLoading(false);
+        if (isMounted && eventsData.success && eventsData.events && eventsData.events.length > 0) {
+          const events: Hackathon[] = eventsData.events;
+          setAllHackathons(events);
+          const initialId = events[0].id;
+          setSelectedHackathonId(initialId);
+          await loadHackathonData(initialId);
         }
       } catch (err) {
         if (isMounted) {
           console.error(err);
-          setError('Failed to load community voting telemetry.');
-          setLoading(false);
+          setError('Failed to load events.');
         }
+      } finally {
+        if (isMounted) setLoading(false);
       }
     };
 
@@ -140,6 +109,13 @@ export default function VotingManagementPage() {
       isMounted = false;
     };
   }, []);
+
+  const handleSelectEvent = async (id: string) => {
+    setSelectedHackathonId(id);
+    setMessage('');
+    setError('');
+    await loadHackathonData(id);
+  };
 
   const handleToggleVoting = async () => {
     if (!hackathon) return;
@@ -162,7 +138,7 @@ export default function VotingManagementPage() {
       if (res.ok && data.success) {
         setHackathon((prev) => (prev ? { ...prev, votingOpen: data.votingOpen } : null));
         setMessage(data.message);
-        loadData();
+        await loadHackathonData(hackathon.id);
       } else {
         setError(data.error || 'Failed to toggle voting state');
       }
@@ -184,13 +160,13 @@ export default function VotingManagementPage() {
       <div className="flex justify-between items-center" style={{ marginBottom: '2.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <span style={{ fontSize: '0.8rem', color: '#ec4899', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Tier 3 Public Showcase
+            Organizer Control Panel
           </span>
           <h1 style={{ fontSize: '2.5rem', marginTop: '0.25rem', marginBottom: '0.5rem' }}>
             Community Voting Control
           </h1>
           <p style={{ color: 'var(--text-secondary)' }}>
-            Manage public community voting windows, anti-sybil defenses, and unmasked live tallies.
+            Manage public community voting windows, anti-sybil defenses, and unmasked live tallies per hackathon event.
           </p>
         </div>
 
@@ -200,6 +176,30 @@ export default function VotingManagementPage() {
           </Link>
         </div>
       </div>
+
+      {/* Hackathon Selection Bar */}
+      {allHackathons.length > 1 && (
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6rem' }}>
+            Select Hackathon to Configure
+          </div>
+          <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+            {allHackathons.map((h) => {
+              const isSelected = h.id === selectedHackathonId;
+              return (
+                <button
+                  key={h.id}
+                  onClick={() => handleSelectEvent(h.id)}
+                  className={isSelected ? 'btn btn-primary' : 'btn btn-secondary'}
+                  style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}
+                >
+                  {h.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {message && (
         <div className="glass-panel" style={{ padding: '1rem 1.5rem', marginBottom: '1.5rem', borderColor: 'var(--accent-tertiary)' }}>
@@ -250,8 +250,8 @@ export default function VotingManagementPage() {
               </div>
               <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: 0 }}>
                 {hackathon?.votingOpen
-                  ? 'Public visitors can cast ballots in the showcase. Results remain masked on the public view to prevent herd effects.'
-                  : 'Voting window is closed. Verified vote totals are unmasked and displayed in the public gallery.'}
+                  ? `Public visitors can cast ballots for ${hackathon?.name} submissions. Results remain masked on the public view.`
+                  : `Voting window is closed for ${hackathon?.name}. Verified vote totals are unmasked and displayed in the public gallery.`}
               </p>
             </div>
 
@@ -296,13 +296,15 @@ export default function VotingManagementPage() {
             </div>
           </div>
 
-          {/* Live Unmasked Leaderboard */}
+          {/* Live Unmasked Leaderboard for selected hackathon */}
           <div className="glass-panel" style={{ padding: '2rem', gridColumn: '1 / -1' }}>
             <div className="flex justify-between items-center" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
               <div>
-                <h3 style={{ fontSize: '1.5rem', margin: 0 }}>Community Vote Tallies (Organizer View)</h3>
+                <h3 style={{ fontSize: '1.5rem', margin: 0 }}>
+                  Community Vote Tallies: {hackathon?.name || 'Selected Event'}
+                </h3>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  Total ballots recorded: <strong style={{ color: 'white' }}>{totalVotes}</strong>
+                  Total ballots recorded for this event: <strong style={{ color: 'white' }}>{totalVotes}</strong>
                 </span>
               </div>
 
@@ -322,7 +324,7 @@ export default function VotingManagementPage() {
 
             {tallies.length === 0 ? (
               <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem' }}>
-                No community ballots have been recorded yet.
+                No community ballots have been recorded yet for this hackathon.
               </p>
             ) : (
               <div style={{ overflowX: 'auto' }}>

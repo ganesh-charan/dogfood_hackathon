@@ -2,10 +2,27 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getUserSession } from '@/lib/auth';
 
-function isValidUrl(urlString: string): boolean {
+function normalizeUrl(urlString?: string | null): string | null {
+  if (!urlString || typeof urlString !== 'string') return null;
+  let trimmed = urlString.trim();
+  if (!trimmed) return null;
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `https://${trimmed}`;
+  }
+  return trimmed;
+}
+
+function isValidUrl(urlString?: string | null): boolean {
+  if (!urlString || typeof urlString !== 'string') return false;
+  const trimmed = urlString.trim();
+  if (!trimmed) return false;
   try {
-    const url = new URL(urlString);
-    return url.protocol === 'http:' || url.protocol === 'https:';
+    const withProto = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const url = new URL(withProto);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      (url.hostname.includes('.') || url.hostname === 'localhost' || /^(\d{1,3}\.){3}\d{1,3}$/.test(url.hostname))
+    );
   } catch {
     return false;
   }
@@ -155,14 +172,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Description must be at least 10 characters long' }, { status: 400 });
     }
 
+    const cleanRepoUrl = normalizeUrl(repoUrl);
+    const cleanDemoUrl = normalizeUrl(demoUrl);
+
     // Additional validations for final submission
     if (targetStatus === 'SUBMITTED') {
-      if (!repoUrl || !isValidUrl(repoUrl.trim())) {
-        return NextResponse.json({ error: 'A valid repository URL (http/https) is required for final submission' }, { status: 400 });
+      if (!cleanRepoUrl || !isValidUrl(cleanRepoUrl)) {
+        return NextResponse.json({ error: 'A valid repository URL is required for final submission (e.g. https://github.com/org/repo)' }, { status: 400 });
       }
 
-      if (demoUrl && !isValidUrl(demoUrl.trim())) {
-        return NextResponse.json({ error: 'Demo URL must be a valid URL (http/https)' }, { status: 400 });
+      if (cleanDemoUrl && !isValidUrl(cleanDemoUrl)) {
+        return NextResponse.json({ error: 'Demo URL must be a valid URL (e.g. https://demo.example.com or https://youtu.be/...)' }, { status: 400 });
       }
 
       if (!trackId) {
@@ -191,8 +211,8 @@ export async function POST(req: Request) {
           data: {
             name: name.trim(),
             description: description.trim(),
-            repoUrl: repoUrl?.trim() || null,
-            demoUrl: demoUrl?.trim() || null,
+            repoUrl: cleanRepoUrl,
+            demoUrl: cleanDemoUrl,
             trackId: trackId || null,
             status: targetStatus
           },
@@ -203,8 +223,8 @@ export async function POST(req: Request) {
           data: {
             name: name.trim(),
             description: description.trim(),
-            repoUrl: repoUrl?.trim() || null,
-            demoUrl: demoUrl?.trim() || null,
+            repoUrl: cleanRepoUrl,
+            demoUrl: cleanDemoUrl,
             trackId: trackId || null,
             status: targetStatus,
             teamId: effectiveTeamId
