@@ -265,9 +265,12 @@ async function main() {
         }
       }
     }
-  }
-
   console.log('--- Database Seeding Completed Successfully ---');
+  console.log('\nseeded. test logins:');
+  console.log('  organizer    Cookie: session=org_7f2a');
+  console.log('  judge_a      Cookie: session=jdg_a_91bc');
+  console.log('  judge_b      Cookie: session=jdg_b_44de');
+  console.log('  participant  Cookie: session=prt_2e88\n');
 }
 
 main()

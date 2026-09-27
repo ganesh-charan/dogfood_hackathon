@@ -5,6 +5,22 @@ All notable changes to the **Dog Food Hackathon Platform** will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-09-27 (DOGFOOD Spec Alignment & Seed Output Verification)
+
+### Added
+- **DOGFOOD Spec Verification & Compliance Checklist**:
+  - Added dedicated *Five Required Things* compliance matrix to `README.md` cross-referencing Section 11 of `dogfoodhack.com/spec`.
+  - Added *Honest Limitations & Architectural Trade-offs* section to `README.md` documenting SQLite concurrency, air-gap JWT auth, and in-memory rate limiting boundaries.
+  - Added *5-Minute Demo Video* lifecycle walkthrough mapping across Create, Submit, Judge, and Publish phases.
+- **Console Seed Telemetry**:
+  - Updated `prisma/seed.js` to print formatted test probe cookie headers upon completion matching the verbatim spec format.
+
+### Changed
+- **Air-Gap Start Script**:
+  - Hardened `start.sh` with `--no-install` on `prisma db push` to guarantee deterministic offline database migration when container network is disabled.
+
+---
+
 ## [1.2.1] - 2026-09-27 (Session Sign-Out Routing & Credential Reference)
 
 ### Fixed
