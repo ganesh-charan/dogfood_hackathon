@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String   @default("PARTICIPANT") // PARTICIPANT, JUDGE, ORGANIZER, ADMIN
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teams        TeamMember[]
+  evaluations  Evaluation[]
+  AuditLog     AuditLog[]
+}
+
+model Hackathon {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  startDate   DateTime
+  endDate     DateTime
+  votingOpen  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  tracks      Track[]
+  prizes      Prize[]
+  teams       Team[]
+  rubrics     Rubric[]
+}
+
+model Track {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  hackathonId String
+  hackathon   Hackathon @relation(fields: [hackathonId], references: [id])
+  
+  projects    Project[]
+  prizes      Prize[]
+}
+
+model Prize {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  trackId     String?
+  track       Track?    @relation(fields: [trackId], references: [id])
+  hackathonId String
+  hackathon   Hackathon @relation(fields: [hackathonId], references: [id])
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  joinCode    String   @unique
+  hackathonId String
+  hackathon   Hackathon @relation(fields: [hackathonId], references: [id])
+
+  members     TeamMember[]
+  projects    Project[]
+}
+
+model TeamMember {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  joinedAt  DateTime @default(now())
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String
+  repoUrl     String?
+  demoUrl     String?
+  status      String   @default("DRAFT") // DRAFT, SUBMITTED
+  teamId      String
+  team        Team     @relation(fields: [teamId], references: [id])
+  trackId     String?
+  track       Track?   @relation(fields: [trackId], references: [id])
+
+  evaluations Evaluation[]
+  votes       Vote[]
+}
+
+model Rubric {
+  id          String   @id @default(uuid())
+  name        String
+  hackathonId String
+  hackathon   Hackathon @relation(fields: [hackathonId], references: [id])
+
+  criteria    Criteria[]
+}
+
+model Criteria {
+  id          String   @id @default(uuid())
+  name        String
+  weight      Float
+  maxScore    Float
+  rubricId    String
+  rubric      Rubric   @relation(fields: [rubricId], references: [id])
+
+  scores      EvaluationScore[]
+}
+
+model Evaluation {
+  id             String   @id @default(uuid())
+  judgeId        String
+  judge          User     @relation(fields: [judgeId], references: [id])
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  totalScore     Float    @default(0)
+  normalizedScore Float?
+  completed      Boolean  @default(false)
+
+  scores         EvaluationScore[]
+}
+
+model EvaluationScore {
+  id           String     @id @default(uuid())
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id])
+  criteriaId   String
+  criteria     Criteria   @relation(fields: [criteriaId], references: [id])
+  score        Float
+}
+
+model Vote {
+  id          String   @id @default(uuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  voterIpOrId String   // For anonymous tracking and duplicate detection
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  details   String
+  createdAt DateTime @default(now())
+}
