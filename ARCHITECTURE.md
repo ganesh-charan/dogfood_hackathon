@@ -12,25 +12,59 @@ Brings up the entire portal, migrates the schema, seeds fixture datasets (`fixtu
 
 ```mermaid
 graph TD
-    Client[Browser / CLI Checker] -->|HTTP / REST| ReverseProxy[Next.js App Router Server]
-    
-    subgraph Core Platform
-        ReverseProxy --> AuthGuard[Auth & RBAC Middleware]
-        AuthGuard --> RouteHandlers[API & Server Components]
-        RouteHandlers --> Prisma[Prisma ORM Client v5.10]
-        Prisma --> SQLite[(Embedded SQLite dev.db)]
+    subgraph Tier 1: Presentation Tier (Frontend)
+        Client[Client Browser / Mobile / CLI]
+        UIComponents[UI Components: GalleryClient, ThreeScene, Dashboards]
+        ClientHooks[Interactive Forms & Realtime Countdown Clocks]
+        Client --> UIComponents
+        UIComponents --> ClientHooks
     end
 
-    subgraph Engines
-        RouteHandlers --> Normalizer[Z-Score Variance Normalization Engine]
-        RouteHandlers --> AssignEngine[Round-Robin & COI Judge Dispatcher]
-        RouteHandlers --> CSVStream[Streaming CSV Serializer]
+    subgraph Tier 2: Application & Data Tier (Backend)
+        APIGateway[Next.js HTTP Route Handlers: /api/*]
+        Security[Security Layer: RBAC Guard, JWT Sessions, RateLimiter]
+        Services[Business Logic Services: Normalization, Evaluation, Export, Project]
+        PrismaORM[Prisma ORM Client]
+        SQLite[(Embedded SQLite dev.db)]
+
+        ClientHooks -->|REST / JSON / HTTP Cookies| APIGateway
+        Client -->|HTTP Probes| APIGateway
+        APIGateway --> Security
+        Security --> Services
+        Services --> PrismaORM
+        PrismaORM --> SQLite
     end
 ```
 
 ---
 
-## 2. Technology Stack & Design Decisions
+## 2. 2-Tier Architecture Model (Frontend & Backend Separation)
+
+The codebase implements a strict **2-Tier Client-Server Architecture** organized cleanly under `src/`:
+
+### Tier 1: Presentation Tier (`src/frontend/` & `src/app/(pages)`)
+- **Location**: `src/frontend/components/`, `src/frontend/`, and App Router page layouts.
+- **Responsibilities**:
+  - **Showcase Gallery**: Dynamic 3D canvas (`ThreeScene.tsx`), Fisher-Yates randomized card grids, search chips, and real-time community ballot casting (`GalleryClient.tsx`).
+  - **Role Dashboards**: Participant team workspaces, judge rubric evaluation cards, and organizer event control centers.
+  - **Client State & Telemetry**: Synchronized deadline countdown clocks adjusting for local machine clock skew.
+  - **Zero Direct Database Access**: The frontend never queries SQLite or Prisma directly; all mutations and queries route through HTTP REST API contracts.
+
+### Tier 2: Application & Data Tier (`src/backend/` & `src/app/api/`)
+- **Location**: `src/backend/` and `src/app/api/` route handlers.
+- **Responsibilities**:
+  - **Security & RBAC Layer** (`src/backend/security/`): Authentication token verification (`auth.ts`), session lifecycle management, automated test fixture probe translation (`session=org_7f2a`, etc.), and in-memory sliding-window rate limiting (`rateLimit.ts`).
+  - **Business Logic Services** (`src/backend/services/`):
+    - `evaluationService.ts`: Strict backend role isolation preventing peer score inspection (HTTP 403) and score validation.
+    - `normalizationService.ts`: Z-score statistical variance compensation engine with damped variance floors.
+    - `exportService.ts`: Streaming RFC-compliant CSV report generator.
+    - `projectService.ts`: Hard deadline enforcement, team membership checks, and Fisher-Yates randomization.
+  - **Database Persistence** (`src/backend/db/`): Single-instance Prisma Client provider wrapping the embedded SQLite database (`dev.db`).
+
+---
+
+## 3. Technology Stack & Design Decisions
+
 
 | Component | Choice | Rationale |
 | :--- | :--- | :--- |

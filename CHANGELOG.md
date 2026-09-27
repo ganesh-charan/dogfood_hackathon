@@ -5,6 +5,27 @@ All notable changes to the **Dog Food Hackathon Platform** will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-27 (2-Tier Architecture: Clean Frontend & Backend Separation)
+
+### Added
+- **Tier 2: Application & Data Tier (`src/backend/`)**:
+  - `src/backend/db/`: Dedicated Prisma client provider wrapping the embedded SQLite database.
+  - `src/backend/security/`: Dedicated modules for session authorization (`auth.ts`) and sliding-window rate limiting (`rateLimit.ts`).
+  - `src/backend/services/`: Modular service layer encapsulating business logic:
+    - `evaluationService.ts`: Strict backend role isolation preventing peer score inspection (HTTP 403) and score lookups.
+    - `normalizationService.ts`: Mathematical Z-Score variance compensation engine with damped variance floors.
+    - `exportService.ts`: Streaming RFC-compliant CSV report generator.
+    - `projectService.ts`: Hard deadline enforcement, team membership verification, and Fisher-Yates shuffle algorithm.
+- **Tier 1: Presentation Tier (`src/frontend/`)**:
+  - `src/frontend/components/`: Re-exported and organized UI client components (`GalleryClient.tsx`, `ThreeScene.tsx`).
+  - Fully decoupled UI presentation layer communicating exclusively over HTTP REST API boundaries.
+- **Backwards Compatibility**:
+  - Maintained pass-through wrappers in `src/lib/` and `src/components/` ensuring 100% test and script stability.
+- **Architecture Documentation**:
+  - Updated `ARCHITECTURE.md` with complete 2-Tier Architecture diagrams, layer boundaries, and component responsibilities.
+
+---
+
 ## [1.2.2] - 2026-09-27 (DOGFOOD Spec Alignment & Seed Output Verification)
 
 ### Added
