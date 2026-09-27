@@ -73,7 +73,66 @@ Navigate to `http://localhost:3000`.
 
 ---
 
-## 4. Running the Acceptance Checker
+## 4. Default Sign-In Credentials & Seed Accounts
+
+The platform seeds a realistic competition dataset via `prisma/seed.js` using `fixtures.json`. All seeded accounts share the same master password:
+
+> **Default Password for all seeded accounts**: `Dogfood2026!`
+
+| Role | Sample Email Account | Name / Identity | Notes & Capabilities |
+| :--- | :--- | :--- | :--- |
+| **ORGANIZER** | `organizer@example.org` | Lead Organizer | Full administrative access, event creation, rubric policy, and results export |
+| **JUDGE** | `tomas.varga@example.org` | Tomas Varga | Judge for Track 3 (Accessibility); scores submissions under strict role isolation |
+| **JUDGE** | `wei.lindqvist@example.org` | Wei Lindqvist | Judge for Tracks 2 & 4 (Data/Analytics & Security) |
+| **JUDGE** | `priya.nair@example.org` | Priya Nair | Judge for Tracks 4 & 5 (Security & Climate) |
+| **PARTICIPANT** | `priya1@example.org` | Team NorthKiln Member | Team captain with unique invite code `TM001` |
+| **PARTICIPANT** | `member1_1@example.org` | Team NorthKiln Member | Roster member |
+| **PARTICIPANT** | `lena2@example.org` | Team LoudQuarry Member | Team captain with unique invite code `TM002` |
+
+### Automated Test Probe Sessions
+For direct API interaction or automated checker suites without UI form logins:
+
+* **Organizer Session**: `Cookie: session=org_7f2a`
+* **Judge A (`tomas.varga`) Session**: `Cookie: session=jdg_a_91bc`
+* **Judge B (`wei.lindqvist`) Session**: `Cookie: session=jdg_b_44de`
+* **Participant Session**: `Cookie: session=prt_2e88`
+
+---
+
+## 5. Role-Based Feature Matrix
+
+The platform strictly enforces role boundaries at the server API layer:
+
+### 👑 Organizer (`ORGANIZER`)
+* **Event Lifecycle Management**: Create hackathons (`/dashboard/events/create`), set start/end timestamps, configure parallel track categories, and enforce automatic submission deadline locks.
+* **Weighted Rubric Builder**: Define quantitative criteria (`/dashboard/rubrics`), assign criteria weights strictly summing to 100% ($\sum w_k = 1.0$), and set max score scales.
+* **Judge Load Balancing**: Algorithmic round-robin assignment distributing submissions across judges according to track expertise while avoiding conflict of interest.
+* **Score Normalization Engine**: Inspect raw evaluation dispersion and execute Z-score variance compensation algorithms to neutralize harsh vs. generous judge grading distributions.
+* **Community Voting Oversight**: Toggle public voting windows open/closed (`/dashboard/voting`), view unmasked real-time vote totals, and monitor anti-Sybil rate limits.
+* **RFC-Compliant CSV Export**: One-click streaming generation of evaluations, rubric scores, and normalized leaderboard ranks (`/api/export.csv`).
+* **Webhooks & REST API v1**: Configure event dispatch hooks (`/api/webhooks`) and access programmatic endpoints (`/api/v1/projects`).
+
+### ⚖️ Judge (`JUDGE`)
+* **Dedicated Evaluation Queue**: Access assigned projects filtered by track expertise (`/dashboard/evaluations`).
+* **Submission Auditing**: Review live demo URLs, GitHub repositories, and architectural descriptions.
+* **Weighted Rubric Grading**: Evaluate projects on a 1–10 scale per rubric criterion, with qualitative feedback commentary.
+* **Strict Role Isolation**: Server-enforced privacy guarantees judges can only see their own scores. Any attempt to inspect peer scores via `/api/judge/scores?judge=...` returns `HTTP 403 Forbidden`.
+* **Progress Tracking**: Real-time counters showing completed vs. pending reviews.
+
+### 🚀 Participant (`PARTICIPANT`)
+* **Team Operations**: Create a team (`/dashboard/teams`) to become Team Captain, generate unique 6-character invite codes (e.g., `TM001`), or join existing teams via invite code.
+* **Project Submission Pipeline**: Iteratively draft project details (title, summary, track, repo, demo URL) (`/dashboard/projects`) before deadline locks; server strictly rejects submissions once the deadline has passed.
+* **Dynamic Certificates**: Generate and download verifiable SVG participant certificates of completion (`/api/certificates/[projectId]`).
+
+### 🌐 Public / Community (Unauthenticated)
+* **Public Showcase Gallery**: Browse submitted projects at `/gallery` without requiring authentication.
+* **Fisher-Yates Ordering**: Randomized card distribution preventing position bias.
+* **Anti-Sybil Voting**: Cast up to 5 votes per IP per hour using SHA-256 fingerprinting with votes cryptographically masked during active voting windows.
+* **Embeddable Widgets**: Embed project cards directly into external sites via `/embed/gallery`.
+
+---
+
+## 6. Running the Acceptance Checker
 
 The official DOGFOOD 2026 benchmark checker can be run at any time using Python 3 standard library:
 
@@ -85,7 +144,7 @@ Configuration is stored in [`.dogfood.toml`](./.dogfood.toml).
 
 ---
 
-## 5. Repository Layout
+## 7. Repository Layout
 
 ```text
 your-repo/
@@ -103,7 +162,7 @@ your-repo/
 
 ---
 
-## 6. Repository Documentation Suite
+## 8. Repository Documentation Suite
 
 - [`acceptance-report.txt`](./acceptance-report.txt): Automated acceptance test results.
 - [`.dogfood.toml`](./.dogfood.toml): Route mappings and auth probe definitions.
@@ -114,9 +173,10 @@ your-repo/
 
 ---
 
-## 7. Operational Notes & Design Invariants
+## 9. Operational Notes & Design Invariants
 
 - **Role Isolation**: Strict backend enforcement returns HTTP 403 when judges attempt to query peer judge scores.
+- **Session Sign-Out Routing**: Sign out clears authentication cookies and cleanly redirects browser sessions to `/login` via HTTP 303, while returning `{ success: true }` JSON to REST API clients.
 - **Anti-Sybil Voting**: Community voting implements SHA-256 IP/User-Agent hashing and 5-vote/hour sliding window rate limits.
 - **Results Masking**: Community vote tallies remain hidden during active voting windows to eliminate bandwagon effects.
 - **One-Command Boot**: System automatically seeds all 40 fixture projects and 30 judges on initial container startup.

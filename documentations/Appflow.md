@@ -62,6 +62,8 @@ stateDiagram-v2
         EditDraft --> FinalSubmission: Check deadline validity
         FinalSubmission --> LockedProject: Project locked after deadline
     }
+    
+    ParticipantDashboard --> Unauthenticated: Sign Out (POST /api/auth/logout -> 303 Redirect)
 ```
 
 ---

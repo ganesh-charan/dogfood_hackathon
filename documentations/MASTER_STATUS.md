@@ -37,8 +37,8 @@
 ## 3. Tier Ladder Verification Checkpoint
 
 ### Tier 1: Core (Mandatory Baseline) - 100% COMPLETE
-- [x] **Authentication & Sessions**: Registered accounts, password hashing, persistent JWT sessions.
-- [x] **Role Hierarchy**: Strict role segmentation (`PARTICIPANT`, `JUDGE`, `ORGANIZER`, `ADMIN`).
+- [x] **Authentication & Sessions**: Registered accounts, password hashing, persistent JWT sessions, seamless signout with 303 browser redirect, and comprehensive seeded credential registry.
+- [x] **Role Hierarchy**: Strict role segmentation (`PARTICIPANT`, `JUDGE`, `ORGANIZER`, `ADMIN`) with backend role isolation.
 - [x] **Event Configuration UI**: Form to provision hackathon dates, tracks, and prizes (`/dashboard/events/create`).
 - [x] **Team Formation Engine**: Unique 6-character team invite codes, roster bounds (1-5 members), and single-team invariants (`/dashboard/teams`).
 - [x] **Project Submission Pipeline**: Multi-field submission drafts, Markdown preview, links validation, and hard deadline locks (`/dashboard/projects/submit`).

@@ -42,9 +42,11 @@
   - `200 OK`: Replaces `auth_token` cookie.
   - `401 Unauthorized`: Invalid credentials.
 
-#### `POST /api/auth/logout`
+#### `POST /api/auth/logout` & `GET /api/auth/logout`
+- **Behavior**: Invalidates and purges `auth_token` and `session` cookies.
 - **Responses**:
-  - `200 OK`: Invalidates and purges `auth_token` cookie.
+  - `303 See Other`: Issued when requested by web browsers (`Accept: text/html` or GET requests), cleanly redirecting the client session to `/login`.
+  - `200 OK`: `{"success": true}` returned for programmatic REST API and headless HTTP clients.
 
 ---
 

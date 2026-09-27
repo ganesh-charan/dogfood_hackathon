@@ -5,6 +5,20 @@ All notable changes to the **Dog Food Hackathon Platform** will be documented in
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-09-27 (Session Sign-Out Routing & Credential Reference)
+
+### Fixed
+- **Authentication & Sign-Out UX Flow**:
+  - Updated `/api/auth/logout` to support browser form submissions and GET requests with an HTTP 303 See Other redirect to `/login`.
+  - Preserved programmatic JSON responses (`{"success": true}`) for REST API / headless clients.
+  - Eliminated raw JSON response rendering when signing out from the dashboard navigation bar.
+
+### Added
+- **Authentication & Role Documentation**:
+  - Added comprehensive Seeded Credentials reference table (Organizer, Judges, Participants, master password `Dogfood2026!`, and automated test probe session cookies) to `README.md`.
+  - Added detailed Role-Based Feature Matrix to `README.md` defining capabilities and constraints across Organizer, Judge, Participant, and Public roles.
+  - Synchronized `TechSpec.md`, `Appflow.md`, and status trackers with current sign-out mechanics.
+
 ---
 
 ## [1.2.0] - 2026-09-27 (Tiers 2, 3, 4 Completion & Canonical Repo Layout)
